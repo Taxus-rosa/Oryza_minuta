@@ -33,5 +33,5 @@ pheatmap(gdata,color = c(colorRampPalette(colors = c("#00008B","White"))(length(
          legend_breaks=seq(-15,15,5),breaks=bk, cluster_cols=T,cluster_rows=T,cutree_rows = 6,
          treeheight_row = 100, treeheight_col = 50, cellwidth = 30,show_rownames = F,
 		 annotation_row = gene.cluster, angle_col = "45", annotation_colors=ann_colors,
-		 filename="4tissues_CC_Ct_DEG_8599_log2.cut6.pdf")
+		 filename="DEG_list_log2.cut6.pdf")
 
