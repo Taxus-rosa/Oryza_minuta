@@ -1,0 +1,144 @@
+use strict;
+
+#########
+
+my $fn_cds="Bt.gff";
+my $fn_tes="Bt.TE.gff";
+my $fp="/datapool/gesong/lining/230719_TE_insertion/Result_Stat/ref_non-ref/ref/BB_Bt/";
+my $sp="B|BC";
+my $fn="_ngs_te_mapper2";
+my $Ext="^".$sp."-.*".$fn;
+opendir(DH, "$fp") or die "Can't open: $!\n";
+my @fn_arr = grep {/$Ext/ && -f "$fp/$_" } readdir(DH);
+closedir(DH);
+my $fn_out=">BB_Bt.ref.TEs.stat.xls";
+my $fn_cor=">BB_Bt.TE.cor.gff";
+my $fn_share=">BB_Bt.ref.TEs.share.xls";
+############
+
+open(CDS,$fn_cds) or die "can't open $fn_cds.\n";
+my %hs_cds; my $od=0; my $chr="";
+while(<CDS>){
+        chomp(); my @a=split(); if($a[2] ne "CDS"){next;}
+        if($a[0] ne $chr){$chr=$a[0];$od=0;}$od++;
+        $hs_cds{$a[0]}{$od}=$a[3].".".$a[4];
+} close(CDS);
+
+open(TES,$fn_tes) or die "can't open $fn_tes.\n";
+open(COR,$fn_cor) or die "can't write into $fn_cor\n";
+my $total=0; my $non=0; my $del=0; my $overlap=0; my $o2=0;
+my $p=0; my $chr="";
+my %hs_te;
+while(<TES>){
+        chomp(); my @a=split(); $total++; my $flag=0; print $total."\n";
+        my $fml=(split(/_/,$a[8]))[1]; my $teid=$a[0]."-".$a[3]."-".$a[4]."-".$fml;
+        # $hs_te{$teid}{'s'}=""; $hs_te{$teid}{'o'}=$total;
+        my $l=keys %{$hs_cds{$a[0]}}; if($a[0] ne $chr){$chr=$a[0];$p=0;}
+        for(my $i=$p;$i<=$l;$i++){
+                my @c=split(/\./,$hs_cds{$a[0]}{$i}); $p=max($i-5,0);
+                if($c[0]>$a[4]){last;}
+                if($c[0]<=$a[3] and $c[1]>=$a[4]){$flag=1;$del++;last;}
+                elsif($c[0]>=$a[3] and $c[1]<=$a[4]){$o2++;$flag=1;last;}
+                elsif(($c[0]-$a[4])*($c[1]-$a[3])<=0){$flag=1;$overlap++;last;}
+        }
+        if($flag==0){
+                $non++; print COR $_."\n";
+                $hs_te{$teid}{'s'}=""; $hs_te{$teid}{'o'}=$total; $hs_te{$teid}{'ini'}=$_;
+        }
+} close(TES); close(COR); print $fn_tes." done.\n";
+open(OUT,$fn_out) or die "can't write into $fn_out\n";
+print OUT "$total\t$non\t$del\t$overlap\t$o2\n";
+
+foreach my $filename (@fn_arr){
+        open(FN,$fp.$filename) or die "can't open file $filename\n";
+        my $s=(split(/_/,$filename))[0];
+        open(OO,">".$s."_1_ngs_te_mapper2_nonredundant.bed_ref") or die "can't write into $s output file.\n";
+        my $total=0; my $same=0; my $diff=0;
+        while(<FN>){
+                chomp(); my @a=split(); if((split(/\|/,$a[3]))[1] eq "non-reference"){next;}
+                $total++; my $fml=(split(/\|/,$a[3]))[0];
+                my $start=$a[1]+1; my $teid=$a[0]."-".$start."-".$a[2]."-".$fml;
+                if(exists $hs_te{$teid}){
+                        $same++; $hs_te{$teid}{'s'}.=$s.";";
+                        print OO $_."\n";
+                } else{$diff++;}
+        } close(FN); close(OO); print $filename." done.\n";
+        print OUT "$s\t$total\t$same\t$diff\n";
+}
+
+my $total=0; my $non=0; my $del=0; my $overlap=0; my $o2=0;
+my $p=0; my $chr="";
+open(SHA,$fn_share) or die "can't write into $fn_share\n";
+foreach my $mk (sort {$hs_te{$a} -> {'o'} <=> $hs_te{$b} -> {'o'}} keys %hs_te){
+        if($hs_te{$mk}{'s'} eq ""){next;}
+        my @a=split(/-/,$mk); my @s=split(/;/,$hs_te{$mk}{'s'}); my %hs_y;
+        foreach my $item (@s){my $y=(split(/-/,$item))[0]; $hs_y{$y}++;}
+        my $st=""; foreach my $kkk (sort{$a cmp $b} keys %hs_y){$st.=$hs_y{$kkk}.$kkk;}
+        print SHA "$a[0]\t$a[1]\t$a[2]\t$a[3]\t$st\t$hs_te{$mk}{'s'}\n";
+        my $l=keys %{$hs_cds{$a[0]}}; $total++; my $flag=0;
+        if($a[0] ne $chr){$chr=$a[0];$p=0;}
+        for(my $i=$p;$i<=$l;$i++){
+                my @c=split(/\./,$hs_cds{$a[0]}{$i}); $p=max($i-5,0);
+                if($c[0]>$a[2]){last;}
+                if($c[0]<=$a[1] and $c[1]>=$a[2]){$flag=1;$del++;last;}
+                elsif($c[0]>=$a[1] and $c[1]<=$a[2]){$o2++;$flag=1;last;}
+                elsif(($c[0]-$a[2])*($c[1]-$a[1])<=0){$flag=1;$overlap++;last;}
+        }       if($flag==0){$non++;}
+} close(SHA);
+print OUT "$total\t$non\t$del\t$overlap\t$o2\n"; close(OUT);
+
+# my $overlap=1; 
+# my $len=10; 
+
+# ########## 
+
+# my %hs_te; my $od=0; my $s=""; my $rep=0;
+# foreach my $filename (@fn_arr){
+#       $od++; open(FN,$fp.$filename) or die "can't open file $filename\n";
+#       $s=(split(/_/,$filename))[0];
+#       my $line=0;
+#       while(<FN>){
+#               # $line++; print $line."\n";
+#               my @a=split(); my $type=(split(/\|/,$a[3]))[0]; my $cha=abs($a[2]-$a[1]);
+#               if($cha<=$len){
+#                       my $r="";
+#                       foreach my $mk (sort {$hs_te{$a[0]}{$a} -> {'s'} <=> $hs_te{$a[0]}{$b} -> {'s'}} keys %{$hs_te{$a[0]}}){
+#                               my @b=split(/\./,$mk);
+#                               if(($a[1]-$b[1])*($a[2]-$b[0])<0 and $type eq $b[2]){
+#                                       if($a[2]-$a[1]+$b[1]-$b[0]>=max($a[2],$b[1])-min($a[1],$b[0])+$overlap){
+#                                               $r=$hs_te{$a[0]}{$mk}{'v'}."+".$a[1]."_".$a[2]."_".$s;
+#                                               delete($hs_te{$a[0]}{$mk});
+#                                               my $tmax=max($a[2],$b[1]);
+#                                               my $tmin=min($a[1],$b[0]);
+#                                               $hs_te{$a[0]}{$tmin.".".$tmax.".".$type}{'s'}=$tmin;
+#                                               $hs_te{$a[0]}{$tmin.".".$tmax.".".$type}{'v'}=$r;
+#                                       }
+#                               }
+#                               if($a[2]<=$b[0]){last;}
+#                       }
+#                       if($r eq ""){
+#                               $hs_te{$a[0]}{$a[1].".".$a[2].".".$type}{'s'}=$a[1];
+#                               $hs_te{$a[0]}{$a[1].".".$a[2].".".$type}{'v'}=$a[1]."_".$a[2]."_".$s;
+#                       }
+#               }
+#       } close(FN); print "$filename done!\n";
+# }
+
+# foreach my $chr (sort{$a cmp $b} keys %hs_te){
+#       foreach my $mkk (sort{$hs_te{$chr}{$a} -> {'s'} <=> $hs_te{$chr}{$b} -> {'s'}} keys %{$hs_te{$chr}}){
+#               # if($hs_te{$chr}{$mkk}{'v'}!~/\+/){next;}
+#               my @m=split(/\./,$mkk);
+#               print OUT "$chr\t$m[0]\t$m[1]\t$m[2]\t$hs_te{$chr}{$mkk}{'v'}\n";
+#       }
+# } close(OUT);
+
+sub max{
+        my $max = shift @_;
+        foreach my $item (@_){if($item > $max){$max = $item;}}
+        return $max;
+}
+sub min{
+        my $min = shift @_;
+        foreach my $item (@_){if($item < $min){$min = $item;}}
+        return $min;
+}

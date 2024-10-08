@@ -1,0 +1,83 @@
+use strict;
+
+#########
+my $fn="BB_Bt.ref.merge.xls";
+my $f_gff="Bt.gff";
+my $fn_out=">BB_Bt.ref.annotation.xls";
+
+my $up=2000; my $down=2000;
+########## 
+
+open(GFF,$f_gff) or die "can't open gff file $f_gff.\n";
+my %hs_gff; my $exon=-1; my $dir="+"; my $id="";
+while(<GFF>){
+        my @g=split();
+        if($g[2] eq "gene"){
+                $id=(split(/=/,$g[8]))[1];
+                if($g[6] eq "+"){
+                        my $ts=$g[3]-$up; my $te=$g[4]+$down;
+                        $hs_gff{$g[0]}{$ts."-".($g[3]-1)}="upstream@".$id;
+                        $hs_gff{$g[0]}{($g[4]+1)."-".$te}="downstream@".$id;
+                        $dir="+"; $exon=$g[3];
+                }
+                else{
+                        my $ts=$g[4]+$up; my $te=$g[3]-$down;
+                        $hs_gff{$g[0]}{$te."-".($g[3]-1)}="downstream@".$id;
+                        $hs_gff{$g[0]}{($g[4]+1)."-".$ts}="upstream@".$id;
+                        $dir="-"; $exon=$g[4];
+                }
+        }
+        elsif($g[2]=~/UTR/ or $g[2] eq "CDS"){$hs_gff{$g[0]}{$g[3]."-".$g[4]}=$g[2]."@".$id;}
+        elsif($g[2] eq "exon"){
+                if($dir eq "+"){
+                        if($g[3]==$exon){$exon=$g[4]; next;}
+                        else{
+                                my $ts=$exon+1; my $te=$g[3]-1;
+                                $hs_gff{$g[0]}{$ts."-".$te}="intron@".$id;
+                                $exon=$g[4];
+                        }
+                }
+                else{
+                        if($g[4]==$exon){$exon=$g[3]; next;}
+                        else{
+                                my $ts=$g[4]+1; my $te=$exon-1;
+                                $hs_gff{$g[0]}{$ts."-".$te}="intron@".$id;
+                                $exon=$g[3];
+                        }
+                }
+        }
+} close(GFF);
+
+open(IN,$fn) or die "can't open file $fn\n";
+open(OUT,$fn_out) or die "can't write into $fn_out\n";
+my $line=0;
+while(<IN>){
+        $line++; chomp(); my @a=split(); my @b=split(/\+/,$a[4]);
+        my $tag=""; my $len_te=$a[2]-$a[1]; my $flag=0; my %hs_y;
+        foreach my $item (@b){my $y=(split(/_/,(split(/-/,$item))[0]))[2]; $hs_y{$y}++;}
+        my $st=""; foreach my $kkk(sort{$a cmp $b} keys %hs_y){$st.=$hs_y{$kkk}.$kkk;}
+        my $slen=""; my $smk=""; my $stag="";
+        foreach my $mk (keys %{$hs_gff{$a[0]}}){
+                my ($s,$e)=split(/-/,$mk);
+                        # print "$hs_gff{$a[0]}{$mk}\n";
+                if(($a[1]+1-$e)*($a[2]-$s)<=0){
+                        my $min=max($a[1]+1,$s); my $max=min($a[2],$e); my $len=$max-$min+1;
+                        $tag=$hs_gff{$a[0]}{$mk}; $flag=1;
+                        $slen.=$len.";"; $smk.=$mk.";"; $stag.=$tag.";";
+                }
+        }
+        if($flag==0){print OUT "$a[0]\t$a[1]\t$a[2]\t$len_te\t$a[3]\t0\tNone\tNone\t$st\t$a[4]\n";}
+        else{print OUT "$a[0]\t$a[1]\t$a[2]\t$len_te\t$a[3]\t$slen\t$smk\t$stag\t$st\t$a[4]\n";}
+        print "$line\n";
+} close(IN);
+
+sub max{
+        my $max = shift @_;
+        foreach my $item (@_){if($item > $max){$max = $item;}}
+        return $max;
+}
+sub min{
+        my $min = shift @_;
+        foreach my $item (@_){if($item < $min){$min = $item;}}
+        return $min;
+}
